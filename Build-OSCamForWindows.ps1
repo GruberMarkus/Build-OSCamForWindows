@@ -146,7 +146,7 @@ do
   done
 done
 
-oscam.exe --build-info > oscam-info.txt
+./oscam.exe --build-info > oscam-info.txt
 
 mkdir ~/oscam-zip
 zip -9 ~/oscam-zip/${z//exe/zip} *

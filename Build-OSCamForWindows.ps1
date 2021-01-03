@@ -25,7 +25,7 @@ set CYGWIN_ARCH=auto
 set CYGWIN_USERNAME=root
 
 :: select the packages to be installed automatically via apt-cyg
-set CYGWIN_PACKAGES=subversion,make,dialog,gcc-core,libssl-devel,libusb1.0-devel,zip,unzip
+set CYGWIN_PACKAGES=subversion,make,dialog,gcc-core,libssl-devel,libusb1.0-devel,zip,unzip,patch
 
 :: if set to 'yes' the local package cache created by cygwin setup will be deleted after installation/update
 set DELETE_CYGWIN_PACKAGE_CACHE=yes
@@ -62,10 +62,10 @@ Remove-Item -Force "cygwin-portable-installer.cmd" -ErrorAction SilentlyContinue
 Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/vegardit/cygwin-portable-installer/master/cygwin-portable-installer.cmd' -OutFile 'cygwin-portable-installer.cmd' -UseBasicParsing
 
 if (Test-Path -PathType container -Path ".\oscam-exe") {
-    Remove-Item -Path ".\oscam-exe" -Recurse -Force
+  Remove-Item -Path ".\oscam-exe" -Recurse -Force
 }
 if (Test-Path -PathType container -Path ".\oscam-zip") {
-    Remove-Item -Path ".\oscam-zip" -Recurse -Force
+  Remove-Item -Path ".\oscam-zip" -Recurse -Force
 }
 
 Write-Host "Done."
@@ -73,18 +73,18 @@ Write-Host "Done."
 
 Write-Host
 if ((-not (Test-Path -PathType container -Path ".\cygwin")) -or (-not (Test-Path -PathType leaf -Path ".\cygwin-portable.cmd")) -or (-not (Test-Path -PathType leaf -Path ".\cygwin-portable-updater.cmd"))) {
-    Write-Host "Installing Cygwin Portable"
-    $p = Start-Process -FilePath ".\cygwin-portable-installer.cmd" -Wait -PassThru 
-    Write-Host "Done. Exit code $($p.Exitcode)."
+  Write-Host "Installing Cygwin Portable"
+  $p = Start-Process -FilePath ".\cygwin-portable-installer.cmd" -Wait -PassThru 
+  Write-Host "Done. Exit code $($p.Exitcode)."
 } else {
-    Write-Host "Updating Cygwin Portable"
-    $p = Start-Process -FilePath ".\cygwin-portable-updater.cmd" -Wait -PassThru
-    Write-Host "Done. Exit code $($p.exitcode)."
+  Write-Host "Updating Cygwin Portable"
+  $p = Start-Process -FilePath ".\cygwin-portable-updater.cmd" -Wait -PassThru
+  Write-Host "Done. Exit code $($p.exitcode)."
 }
 
 if ($p.ExitCode -ne 0) {
-    Write-Host "Exit code not 0, exiting." -ForegroundColor red
-    exit 1
+  Write-Host "Exit code not 0, exiting." -ForegroundColor red
+  exit 1
 }
 
 
@@ -106,11 +106,19 @@ fi
 
 if [ ! -d "oscam-svn" ]; then
   svn checkout https://svn.streamboard.tv/oscam/trunk oscam-svn
-  cd oscam-svn
 else
-  cd oscam-svn
-  svn update
+  rm -r -f oscam-svn
+  svn checkout https://svn.streamboard.tv/oscam/trunk oscam-svn
 fi
+
+cd oscam-svn
+
+if [ -f "oscam-emu.patch" ]; then
+  rm -r -f oscam-emu.patch
+fi
+
+wget https://raw.githubusercontent.com/oscam-emu/oscam-emu/master/oscam-emu.patch
+patch -p0 < oscam-emu.patch
 
 make distclean
 make allyesconfig
@@ -156,8 +164,8 @@ Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ir
 $p = Start-Process -FilePath ".\cygwin-portable.cmd" -ArgumentList "-c '~/make.sh'"-Wait -PassThru
 Write-Host "Done. Exit code $($p.exitcode)."
 if ($p.ExitCode -ne 0) {
-    Write-Host "Exit code not 0, exiting." -ForegroundColor red
-    exit 1
+  Write-Host "Exit code not 0, exiting." -ForegroundColor red
+  exit 1
 }
 
 

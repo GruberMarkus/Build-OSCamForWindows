@@ -11,7 +11,7 @@ Write-Host
 
 $tempPath = (Join-Path -Path $env:TEMP -ChildPath Build-OSCamForWindows)
 if (-not (Test-Path -Path $tempPath -PathType Container)) {
-  New-Item -Path $tempPath -ItemType Directory
+  New-Item -Path $tempPath -ItemType Directory | Out-Null
 }
 Set-Location -Path $tempPath
 

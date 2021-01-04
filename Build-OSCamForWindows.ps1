@@ -1,12 +1,19 @@
 Clear-Host
-Write-Host "AUTOMATED OSCAM COMPILER FOR WINDOWS" -ForegroundColor green
+Write-Host "AUTOMATED OSCAM COMPILER FOR WINDOWS"
 Write-Host
-Write-Host "The whole process is fully automated. You only need this script, internet access and at least 1 GB free disk space."
-Write-Host "oscam is compiled with all options enabled, plus support for PCSC and LIBUSB."
+Write-Host "The whole process is fully automated. You only need this script, internet access"
+Write-Host "and at least 1 GB free disk space in the temp directory."
+Write-Host
+Write-Host "OSCam is compiled with all options enabled, plus PCSC, LIBUSB and OSCam-Emu."
+Write-Host
 Write-Host "Some steps may take several minutes, please be patient."
-Write-Host "Only errors are shown in this window."
 Write-Host
 
+$tempPath = (Join-Path -Path $env:TEMP -ChildPath Build-OSCamForWindows)
+if (-not (Test-Path -Path $tempPath -PathType Container)) {
+  New-Item -Path $tempPath -ItemType Directory
+}
+Set-Location -Path $tempPath
 
 # create cygwin-portable-installer-config.cmd
 # last update: 2021-01-02
@@ -56,30 +63,22 @@ set MINTTY_OPTIONS=
 '@ | Out-File -FilePath '.\cygwin-portable-installer-config.cmd' -Force -Encoding ascii
 
 Write-Host
-Write-Host "Downloading latest Cygwin Portable Installer"
+Write-Host "Downloading latest Cygwin Portable Installer ... " -NoNewline
 Remove-Item -Force "cygwin-portable-installer.cmd" -ErrorAction SilentlyContinue
 
 Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/vegardit/cygwin-portable-installer/master/cygwin-portable-installer.cmd' -OutFile 'cygwin-portable-installer.cmd' -UseBasicParsing
 
-if (Test-Path -PathType container -Path ".\oscam-exe") {
-  Remove-Item -Path ".\oscam-exe" -Recurse -Force
-}
-if (Test-Path -PathType container -Path ".\oscam-zip") {
-  Remove-Item -Path ".\oscam-zip" -Recurse -Force
-}
-
-Write-Host "Done."
-
+Write-Host "done."
 
 Write-Host
 if ((-not (Test-Path -PathType container -Path ".\cygwin")) -or (-not (Test-Path -PathType leaf -Path ".\cygwin-portable.cmd")) -or (-not (Test-Path -PathType leaf -Path ".\cygwin-portable-updater.cmd"))) {
-  Write-Host "Installing Cygwin Portable"
+  Write-Host "Installing Cygwin Portable ... " -NoNewline
   $p = Start-Process -FilePath ".\cygwin-portable-installer.cmd" -Wait -PassThru 
-  Write-Host "Done. Exit code $($p.Exitcode)."
+  Write-Host "done. Exit code $($p.Exitcode)."
 } else {
-  Write-Host "Updating Cygwin Portable"
+  Write-Host "Updating Cygwin Portable ... " -NoNewline
   $p = Start-Process -FilePath ".\cygwin-portable-updater.cmd" -Wait -PassThru
-  Write-Host "Done. Exit code $($p.exitcode)."
+  Write-Host "done. Exit code $($p.exitcode)."
 }
 
 if ($p.ExitCode -ne 0) {
@@ -90,17 +89,17 @@ if ($p.ExitCode -ne 0) {
 
 
 Write-Host
-Write-Host "Downloading latest oscam source code and compiling it"
+Write-Host "Downloading latest oscam source code and compiling it ... " -NoNewline
 
 # shell script to run in Cygwin
 $x = @'
 cd ~/
 
-if [ ! -d "oscam-exe" ]; then
-  rm -r -f oscam-zip
+if [ -d "oscam-exe" ]; then
+  rm -r -f oscam-exe
 fi
 
-if [ ! -d "oscam-zip" ]; then
+if [ -d "oscam-zip" ]; then
   rm -r -f oscam-zip
 fi
 
@@ -125,6 +124,7 @@ make allyesconfig
 make USE_LIBUSB=1 USE_PCSC=1 PCSC_LIB='-lwinscard'
 
 mkdir ~/oscam-exe
+
 cd ~/oscam-exe
 cp ~/oscam-svn/Distribution/*cygwin.exe* -t .
 
@@ -162,25 +162,50 @@ zip -9 ~/oscam-zip/${z//exe/zip} *
 
 Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ireplace "`r`n", "`n") + "`n") -Encoding Byte -Path '.\cygwin\home\root\make.sh' -Force -NoNewline
 $p = Start-Process -FilePath ".\cygwin-portable.cmd" -ArgumentList "-c '~/make.sh'"-Wait -PassThru
-Write-Host "Done. Exit code $($p.exitcode)."
+Write-Host "done. Exit code $($p.exitcode)."
 if ($p.ExitCode -ne 0) {
   Write-Host "Exit code not 0, exiting." -ForegroundColor red
   exit 1
 }
 
 
-Write-Host
-Write-Host "Copying compiled binaries and dependent Cygwin DLLs"
-New-Item -Path "." -Name "oscam-exe" -ItemType "directory" | Out-Null
-New-Item -Path "." -Name "oscam-zip" -ItemType "directory" | Out-Null
-Copy-Item -Path ".\cygwin\home\root\oscam-exe\*" -Destination ".\oscam-exe\" -Force
-Copy-Item -Path ".\cygwin\home\root\oscam-zip\*" -Destination ".\oscam-zip\" -Force
+if ($PSScriptRoot) {
+  Write-Host
+  Write-Host "Copying compiled binaries and dependent Cygwin DLLs ... " -NoNewline
 
-Write-Host "Done."
+  Set-Location $PSScriptRoot
+  if (Test-Path -PathType container -Path ".\oscam-exe") {
+    Remove-Item -Path ".\oscam-exe" -Recurse -Force
+    New-Item -Path "." -Name "oscam-exe" -ItemType "directory" | Out-Null
+  } else {
+    New-Item -Path "." -Name "oscam-exe" -ItemType "directory" | Out-Null
+  }
 
+  if (-not (Test-Path -PathType container -Path ".\oscam-zip")) {
+    New-Item -Path "." -Name "oscam-zip" -ItemType "directory" | Out-Null
+  }
+
+  $x = (Get-ChildItem -Path (Join-Path -Path $tempPath -ChildPath "cygwin\home\root\oscam-zip\*.zip") | Where-Object { ! $_.PSIsContainer } | Select-Object -First 1).fullname
+  $y = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "oscam-zip") -ChildPath (Split-Path $x -Leaf)
+
+  Copy-Item -Path $x -Destination $y -Force
+  Expand-Archive -Path $y -DestinationPath (Join-Path -Path $PSScriptRoot -ChildPath "oscam-exe") -Force
+
+  Write-Host "done."
+}
 
 Write-Host
-Write-Host "The 'oscam-exe' folder contains 'oscam.exe' and dependent Cygwin DLLs," -ForegroundColor green
-Write-Host "as well as 'oscam-info.txt' with the output of 'oscam.exe --build-info'." -ForegroundColor green
 Write-Host
-Write-Host "You can find a zipped archive of all files for redistribution in 'oscam-zip'." -ForegroundColor Green
+Write-Host "Find 'oscam.exe', required Cygwin DLLs and 'oscam-info.txt' (output of 'oscam.exe --build-info') here:" 
+if ($PSScriptRoot) {
+  Write-Host ("  '" + (Join-Path -Path $PSScriptRoot -ChildPath "oscam-exe") + "'") 
+} else {
+  Write-Host ("  '" + (Join-Path -Path $tempPath -ChildPath "oscam-exe") + "'") 
+}
+Write-Host
+Write-Host "Find a ZIP file containing all files required for redistribution here:" 
+if ($PSScriptRoot) {
+  Write-Host ("  '" + (Join-Path -Path $PSScriptRoot -ChildPath "oscam-zip") + "'") 
+} else {
+  Write-Host ("  '" + (Join-Path -Path $tempPath -ChildPath "oscam-zip") + "'") 
+}

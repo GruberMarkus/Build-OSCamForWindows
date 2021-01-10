@@ -95,6 +95,17 @@ Write-Host "Downloading latest oscam source code and compiling it ... " -NoNewli
 $x = @'
 cd ~/
 
+echo "START TIMESTAMP: $(date --rfc-3339='seconds')"
+echo "======================================================================"
+
+echo
+echo "PREPARATIONS"
+echo "======================================================================"
+
+if [ -d "oscam-svn" ]; then
+  rm -r -f oscam-svn
+fi
+
 if [ -d "oscam-exe" ]; then
   rm -r -f oscam-exe
 fi
@@ -103,25 +114,34 @@ if [ -d "oscam-zip" ]; then
   rm -r -f oscam-zip
 fi
 
-if [ ! -d "oscam-svn" ]; then
-  svn checkout https://svn.streamboard.tv/oscam/trunk oscam-svn
-else
-  rm -r -f oscam-svn
-  svn checkout https://svn.streamboard.tv/oscam/trunk oscam-svn
-fi
-
-cd oscam-svn
-
 if [ -f "oscam-emu.patch" ]; then
   rm -r -f oscam-emu.patch
 fi
 
+echo
+echo "SVN CHECKOUT OSCAM TRUNK"
+echo "======================================================================"
+
+svn checkout https://svn.streamboard.tv/oscam/trunk oscam-svn
+
+cd oscam-svn
+
+echo
+echo "DOWNLOAD AND APPLY OSCAM-EMU.PATCH"
+echo "======================================================================"
 wget https://raw.githubusercontent.com/oscam-emu/oscam-emu/master/oscam-emu.patch
 patch -p0 < oscam-emu.patch
 
+echo
+echo "BUILD PATCHED OSCAM"
+echo "======================================================================"
 make distclean
 make allyesconfig
 make USE_LIBUSB=1 USE_PCSC=1 PCSC_LIB='-lwinscard'
+
+echo
+echo "COPY BUILT EXE FILES AND RENAME THEM"
+echo "======================================================================"
 
 mkdir ~/oscam-exe
 
@@ -143,6 +163,10 @@ do
   mv $i list_smargo.exe
 done
 
+echo
+echo "COPY DEPENDENT CYGWIN DLL FILES"
+echo "======================================================================"
+
 for i in $(ls *.exe)
 do
   for x in $(cygcheck.exe ./$i)
@@ -154,14 +178,28 @@ do
   done
 done
 
+echo
+echo "CREATE OSCAM-INFO.txt"
+echo "======================================================================"
+
 ./oscam.exe --build-info > oscam-info.txt
+
+echo
+echo "CREATE ZIP FILE"
+echo "======================================================================"
 
 mkdir ~/oscam-zip
 zip -9 ~/oscam-zip/${z//exe/zip} *
+
+echo
+echo "END TIMESTAMP: $(date --rfc-3339='seconds')"
+echo "======================================================================"
 '@
 
 Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ireplace "`r`n", "`n") + "`n") -Encoding Byte -Path '.\cygwin\home\root\make.sh' -Force -NoNewline
-$p = Start-Process -FilePath ".\cygwin-portable.cmd" -ArgumentList "-c '~/make.sh'"-Wait -PassThru
+$p = Start-Process -FilePath ".\cygwin-portable.cmd" -ArgumentList '-c "~/make.sh 2>&1 | tee /tmp/oscam-buildlog.txt"' -Wait -PassThru
+Move-Item -Path ".\cygwin\tmp\oscam-buildlog.txt" -Destination ".\cygwin\home\root\oscam-exe\"
+Compress-Archive -Path ".\cygwin\home\root\oscam-exe\*"  -Update -DestinationPath ((Get-ChildItem ".\cygwin\home\root\oscam-zip\*.zip" | Select-Object -First 1).fullname)
 Write-Host "done. Exit code $($p.exitcode)."
 if ($p.ExitCode -ne 0) {
   Write-Host "Exit code not 0, exiting." -ForegroundColor red
@@ -196,7 +234,8 @@ if ($PSScriptRoot) {
 
 Write-Host
 Write-Host
-Write-Host "Find 'oscam.exe', required Cygwin DLLs and 'oscam-info.txt' (output of 'oscam.exe --build-info') here:" 
+Write-Host "Find 'oscam.exe', required Cygwin DLLs, 'oscam-info.txt' (output of 'oscam.exe --build-info'),"
+Write-Host "and 'oscam-buildlog.txt' here:" 
 if ($PSScriptRoot) {
   Write-Host ("  '" + (Join-Path -Path $PSScriptRoot -ChildPath "oscam-exe") + "'") 
 } else {

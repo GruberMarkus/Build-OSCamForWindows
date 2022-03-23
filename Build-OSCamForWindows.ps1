@@ -199,7 +199,12 @@ echo "END TIMESTAMP: $(date --rfc-3339='seconds')"
 echo "======================================================================"
 '@
 
-Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ireplace "`r`n", "`n") + "`n") -Encoding Byte -Path '.\cygwin\home\root\make.sh' -Force -NoNewline
+if ($($PSVersionTable.PSEdition) -ieq 'Core') {
+    Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ireplace "`r`n", "`n") + "`n") -AsByteStream -Path '.\cygwin\home\root\make.sh' -Force -NoNewline
+} else {
+    Set-Content -Value (New-Object System.Text.UTF8Encoding $false).GetBytes(($x -ireplace "`r`n", "`n") + "`n") -Encoding Byte -Path '.\cygwin\home\root\make.sh' -Force -NoNewline
+}
+
 $p = Start-Process -FilePath ".\cygwin-portable.cmd" -ArgumentList '-c "~/make.sh 2>&1 | tee /tmp/oscam-buildlog.txt"' -Wait -PassThru
 Move-Item -Path ".\cygwin\tmp\oscam-buildlog.txt" -Destination ".\cygwin\home\root\oscam-exe\"
 Compress-Archive -Path ".\cygwin\home\root\oscam-exe\*"  -Update -DestinationPath ((Get-ChildItem ".\cygwin\home\root\oscam-zip\*.zip" | Select-Object -First 1).fullname)
